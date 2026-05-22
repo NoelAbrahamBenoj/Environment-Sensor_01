@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ENV.SYS — Smart Environment Monitor</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --c-bg: #020810;
+    --c-border: rgba(0,255,200,0.15);
+    --c-glow: #00ffc8;
+    --c-warn: #ff5a5a;
+    --c-text: #d4f5ee;
+    --c-dim: #7ec8b8;
+    --c-label: #a0ddd0;
+    --font-mono: 'Share Tech Mono', monospace;
+    --font-ui: 'Rajdhani', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--c-bg); color: var(--c-text);
+    font-family: var(--font-mono); height: 100vh; overflow: hidden;
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    grid-template-rows: 56px 1fr 160px;
+    gap: 1px; background-color: rgba(0,255,200,0.08);
+  }
+  body::before {
+    content:''; position:fixed; inset:0;
+    background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.12) 2px,rgba(0,0,0,0.12) 4px);
+    pointer-events:none; z-index:100;
+  }
+  .cell { background: var(--c-bg); }
+
+  /* TOPBAR */
+  #topbar {
+    grid-column: 1/-1; display:flex; align-items:center;
+    padding: 0 24px; gap:16px;
+    border-bottom: 1px solid var(--c-border);
+    background: rgba(0,20,15,0.97);
+  }
+  .logo { font-family:var(--font-ui); font-weight:700; font-size:20px; letter-spacing:6px; color:var(--c-glow); text-shadow:0 0 18px var(--c-glow); }
+  .logo span { color: rgba(0,255,200,0.3); }
+  .pill { font-size:10px; letter-spacing:2px; padding:4px 12px; border-radius:2px; border:1px solid var(--c-border); color:var(--c-dim); text-transform:uppercase; transition:all 0.3s; }
+  .pill.lit  { color:var(--c-glow); border-color:var(--c-glow); box-shadow:0 0 8px rgba(0,255,200,0.2); }
+  .pill.warn { color:var(--c-warn); border-color:var(--c-warn); box-shadow:0 0 8px rgba(255,90,90,0.2); }
+  #clock { font-size:13px; color:var(--c-dim); letter-spacing:2px; margin-left:auto; }
+  #connectBtn {
+    background:transparent; border:1px solid var(--c-glow); color:var(--c-glow);
+    font-family:var(--font-mono); font-size:10px; letter-spacing:3px; padding:6px 16px;
+    cursor:pointer; text-transform:uppercase; transition:all 0.2s; position:relative; overflow:hidden;
+  }
+  #connectBtn::before { content:''; position:absolute; inset:0; background:var(--c-glow); opacity:0; transition:opacity 0.2s; }
+  #connectBtn:hover { color:#020810; }
+  #connectBtn:hover::before { opacity:1; }
+  #connectBtn span { position:relative; z-index:1; }
+
+  /* CHART */
+  #chartArea {
+    grid-column:1; grid-row:2; padding:20px 24px;
+    display:flex; flex-direction:column; gap:12px;
+    background:rgba(0,10,8,0.95); overflow:hidden;
+  }
+  .chart-hdr { display:flex; align-items:center; gap:16px; }
+  .chart-title { font-size:10px; letter-spacing:4px; color:var(--c-dim); text-transform:uppercase; }
+  .legend { display:flex; gap:16px; margin-left:auto; }
+  .leg { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--c-dim); letter-spacing:1px; }
+  .leg-dot { width:8px; height:8px; border-radius:50%; }
+  #chartWrap { flex:1; position:relative; }
+  .br { position:absolute; width:16px; height:16px; border-color:rgba(0,255,200,0.35); border-style:solid; }
+  .br.tl{top:0;left:0;border-width:2px 0 0 2px} .br.tr{top:0;right:0;border-width:2px 2px 0 0}
+  .br.bl{bottom:0;left:0;border-width:0 0 2px 2px} .br.br2{bottom:0;right:0;border-width:0 2px 2px 0}
+  .pulse { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--c-glow); box-shadow:0 0 6px var(--c-glow); margin-right:6px; animation:pa 2s ease-in-out infinite; }
+  @keyframes pa { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.3;transform:scale(0.6)} }
+
+  /* SIDE PANEL */
+  #sidePanel {
+    grid-column:2; grid-row:2; padding:14px 16px;
+    display:flex; flex-direction:column; gap:12px;
+    border-left:1px solid var(--c-border);
+    overflow-y:auto; background:rgba(0,8,6,0.97);
+  }
+  .sec { font-size:9px; letter-spacing:4px; color:var(--c-dim); text-transform:uppercase; border-bottom:1px solid var(--c-border); padding-bottom:5px; margin-bottom:2px; }
+
+  /* Sensor cards */
+  .sc { border:1px solid var(--c-border); padding:11px 13px; background:rgba(0,255,200,0.02); transition:border-color 0.4s, box-shadow 0.4s, background 0.4s; }
+  .sc.alert { border-color:var(--c-warn); box-shadow:0 0 12px rgba(255,90,90,0.12), inset 0 0 14px rgba(255,90,90,0.04); background:rgba(255,40,40,0.04); }
+  .sc.good  { border-color:rgba(0,255,200,0.35); box-shadow:0 0 8px rgba(0,255,200,0.05); }
+  .sc-top { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:5px; }
+  .sc-name { font-family:var(--font-ui); font-weight:700; font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--c-label); }
+  .sc-val { font-size:22px; color:var(--c-text); text-shadow:0 0 8px rgba(0,255,200,0.25); transition:color 0.4s; font-variant-numeric:tabular-nums; }
+  .sc.alert .sc-val { color:#ffaaaa; text-shadow:0 0 8px rgba(255,90,90,0.35); }
+  .sc-unit { font-size:10px; color:var(--c-dim); margin-left:2px; }
+  .sc-status { font-size:9px; letter-spacing:2px; text-transform:uppercase; margin-bottom:7px; color:var(--c-dim); transition:color 0.4s; }
+  .sc.alert .sc-status { color:#ff9090; }
+  .sc.good  .sc-status { color:#5eecc8; }
+  .sc-bar { height:3px; background:rgba(255,255,255,0.05); overflow:hidden; }
+  .sc-fill { height:100%; transition:width 0.5s cubic-bezier(0.16,1,0.3,1), background 0.4s; box-shadow:0 0 6px currentColor; position:relative; }
+  .sc-fill::after { content:''; position:absolute; right:0; top:0; bottom:0; width:3px; background:white; opacity:0.35; }
+  .sc.alert .sc-fill { background:var(--c-warn) !important; }
+
+  /* Mode buttons */
+  .mode-grid { display:grid; grid-template-columns:1fr 1fr; gap:5px; }
+  .mbtn {
+    background:transparent; border:1px solid var(--c-border); color:var(--c-dim);
+    font-family:var(--font-mono); font-size:9px; letter-spacing:1px; padding:7px 4px;
+    cursor:pointer; text-transform:uppercase; transition:all 0.2s; text-align:center; line-height:1.5;
+  }
+  .mbtn .mi { display:block; font-size:13px; margin-bottom:1px; }
+  .mbtn:hover { border-color:var(--c-glow); color:var(--c-text); background:rgba(0,255,200,0.05); }
+  .mbtn.active { border-color:var(--c-glow); color:var(--c-glow); background:rgba(0,255,200,0.08); box-shadow:0 0 10px rgba(0,255,200,0.1); }
+
+  /* Mode requirements */
+  #modeInfo { font-size:11px; line-height:1.9; color:var(--c-dim); background:rgba(0,255,200,0.02); border:1px solid var(--c-border); padding:9px 11px; }
+  .req { display:flex; align-items:flex-start; gap:8px; }
+  .rdot { width:6px; height:6px; border-radius:50%; flex-shrink:0; margin-top:5px; transition:background 0.3s; }
+  .req.ok .rdot { background:var(--c-glow); box-shadow:0 0 4px var(--c-glow); }
+  .req.bad .rdot { background:var(--c-warn); box-shadow:0 0 4px var(--c-warn); }
+  .req.ok  { color:var(--c-text); }
+  .req.bad { color:#ffb0b0; }
+
+  /* Advice */
+  #advice { font-family:var(--font-ui); font-size:13px; font-weight:500; line-height:1.8; color:var(--c-text); letter-spacing:0.3px; }
+  #advice.ok  { color:#9afce8; }
+  #advice.bad { color:#ffb8b8; }
+
+  /* Bottom bar */
+  #bot {
+    grid-column:1/-1; grid-row:3;
+    border-top:1px solid var(--c-border);
+    display:grid; grid-template-columns:repeat(6,1fr);
+    gap:1px; background:rgba(0,255,200,0.07);
+  }
+  .sc2 { background:rgba(0,6,5,0.98); padding:13px 16px; display:flex; flex-direction:column; justify-content:center; gap:3px; transition:background 0.3s; }
+  .sc2:hover { background:rgba(0,255,200,0.04); }
+  .s-lbl { font-size:9px; letter-spacing:3px; color:var(--c-dim); text-transform:uppercase; }
+  .s-val { font-size:19px; color:var(--c-text); font-variant-numeric:tabular-nums; }
+  .s-sub { font-size:9px; color:rgba(180,220,210,0.3); letter-spacing:1px; }
+
+  /* Severity bg */
+  #sevBg { position:fixed; inset:0; pointer-events:none; z-index:0; background:radial-gradient(ellipse at 50% 110%, rgba(255,40,40,0.1) 0%, transparent 65%); opacity:0; transition:opacity 1s; }
+  ::-webkit-scrollbar { width:3px; }
+  ::-webkit-scrollbar-thumb { background:rgba(0,255,200,0.2); border-radius:2px; }
+</style>
+</head>
+<body>
+<div id="sevBg"></div>
+
+<!-- TOPBAR -->
+<div id="topbar" class="cell">
+  <div class="logo">ENV<span>.</span>SYS</div>
+  <div class="pill lit" id="modeTag">MODE: SLEEP</div>
+  <div class="pill" id="connStatus">● OFFLINE</div>
+  <div id="clock">--:--:--</div>
+  <button id="connectBtn" onclick="connect()"><span>⚡ CONNECT</span></button>
+</div>
+
+<!-- CHART -->
+<div id="chartArea" class="cell">
+  <div class="chart-hdr">
+    <div class="chart-title"><span class="pulse"></span>REALTIME SENSOR FEED — 120s WINDOW</div>
+    <div class="legend">
+      <div class="leg"><div class="leg-dot" style="background:#00ffc8"></div>LIGHT</div>
+      <div class="leg"><div class="leg-dot" style="background:#ffc840"></div>TEMP</div>
+      <div class="leg"><div class="leg-dot" style="background:#ff6060"></div>SOUND</div>
+    </div>
+  </div>
+  <div id="chartWrap">
+    <div class="br tl"></div><div class="br tr"></div>
+    <div class="br bl"></div><div class="br br2"></div>
+    <canvas id="chart"></canvas>
+  </div>
+</div>
+
+<!-- SIDE PANEL -->
+<div id="sidePanel" class="cell">
+  <div>
+    <div class="sec">Live Sensors</div>
+    <div class="sc" id="c-light">
+      <div class="sc-top">
+        <div class="sc-name">💡 Light</div>
+        <div><span class="sc-val" id="v-light">---</span><span class="sc-unit">/1023</span></div>
+      </div>
+      <div class="sc-status" id="s-light">AWAITING</div>
+      <div class="sc-bar"><div class="sc-fill" id="b-light" style="width:0%;background:#00ffc8"></div></div>
+    </div>
+    <div style="height:7px"></div>
+    <div class="sc" id="c-temp">
+      <div class="sc-top">
+        <div class="sc-name">🌡 Temp</div>
+        <div><span class="sc-val" id="v-temp">---</span><span class="sc-unit">raw</span></div>
+      </div>
+      <div class="sc-status" id="s-temp">AWAITING</div>
+      <div class="sc-bar"><div class="sc-fill" id="b-temp" style="width:0%;background:#ffc840"></div></div>
+    </div>
+    <div style="height:7px"></div>
+    <div class="sc" id="c-sound">
+      <div class="sc-top">
+        <div class="sc-name">🔊 Sound</div>
+        <div><span class="sc-val" id="v-sound">---</span><span class="sc-unit">raw</span></div>
+      </div>
+      <div class="sc-status" id="s-sound">AWAITING</div>
+      <div class="sc-bar"><div class="sc-fill" id="b-sound" style="width:0%;background:#ff6060"></div></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="sec">Environment Mode</div>
+    <div class="mode-grid" id="modeGrid"></div>
+  </div>
+
+  <div>
+    <div class="sec">Mode Requirements</div>
+    <div id="modeInfo">—</div>
+  </div>
+
+  <div>
+    <div class="sec">System Advice</div>
+    <div id="advice" class="ok">Awaiting sensor input…</div>
+  </div>
+</div>
+
+<!-- BOTTOM -->
+<div id="bot" class="cell">
+  <div class="sc2"><div class="s-lbl">Light Peak</div><div class="s-val" id="ml">---</div><div class="s-sub">SESSION HIGH</div></div>
+  <div class="sc2"><div class="s-lbl">Temp Peak</div><div class="s-val" id="mt">---</div><div class="s-sub">SESSION HIGH</div></div>
+  <div class="sc2"><div class="s-lbl">Sound Peak</div><div class="s-val" id="ms">---</div><div class="s-sub">SESSION HIGH</div></div>
+  <div class="sc2"><div class="s-lbl">Alerts</div><div class="s-val" id="ma">0</div><div class="s-sub">SESSION TOTAL</div></div>
+  <div class="sc2"><div class="s-lbl">Uptime</div><div class="s-val" id="mu">00:00</div><div class="s-sub">MM:SS</div></div>
+  <div class="sc2"><div class="s-lbl">Status</div><div class="s-val" id="mst" style="font-size:12px;letter-spacing:2px">STANDBY</div><div class="s-sub">SYSTEM</div></div>
+</div>
+
+<script>
+/**
+ * SENSOR HARDWARE DIRECTION:
+ *   Light : HIGH value = DARK   (500+ = dark,  <500 = bright)
+ *   Temp  : HIGH value = COOL   (110+ = cool,  95-110 = normal,  <95 = hot)
+ *   Sound : HIGH value = LOUD   (12+  = loud,  <12 = quiet)
+ *
+ * MODE RANGES: { min, max } = acceptable range per sensor (null = no limit)
+ *   alertLow  = fires when value < min
+ *   alertHigh = fires when value > max
+ */
+const MODES = {
+  sleep: {
+    label:'Sleep', icon:'🌙',
+    desc: 'Dark, warm (hot/normal) & silent',
+    light: { min:500,  max:null, wantLabel:'Dark (≥500)',         alertLow:'Too bright — dim the lights for sleep',          alertHigh:null },
+    temp:  { min:null, max:110,  wantLabel:'Warm — not cool (<110)', alertLow:null,                                          alertHigh:'Too cool — raise temp for comfortable sleep' },
+    sound: { min:null, max:10,   wantLabel:'Silent (<10)',         alertLow:null,                                            alertHigh:'Too noisy — silence needed for sleep' }
+  },
+  library: {
+    label:'Library', icon:'📚',
+    desc: 'Bright, cool & very quiet',
+    light: { min:null, max:450,  wantLabel:'Bright (<450)',        alertLow:null,                                            alertHigh:'Too dark — library needs good lighting' },
+    temp:  { min:110,  max:null, wantLabel:'Cool (≥110)',          alertLow:'Too warm — library should be cool',             alertHigh:null },
+    sound: { min:null, max:10,   wantLabel:'Very quiet (<10)',     alertLow:null,                                            alertHigh:'Too loud — libraries require near-silence' }
+  },
+  classroom: {
+    label:'Class', icon:'🏫',
+    desc: 'Well-lit, normal temp & moderate noise',
+    light: { min:null, max:460,  wantLabel:'Good light (<460)',    alertLow:null,                                            alertHigh:'Too dark — classroom needs adequate lighting' },
+    temp:  { min:95,   max:110,  wantLabel:'Normal (95–110)',      alertLow:'Too hot for a classroom',                       alertHigh:'Too cool — students will be uncomfortable' },
+    sound: { min:null, max:50,   wantLabel:'Moderate (<50)',       alertLow:null,                                            alertHigh:'Too loud — class is being disrupted' }
+  },
+  study: {
+    label:'Study', icon:'✏️',
+    desc: 'Bright, cool & quiet',
+    light: { min:null, max:430,  wantLabel:'Bright (<430)',        alertLow:null,                                            alertHigh:'Too dark — need light to study effectively' },
+    temp:  { min:110,  max:null, wantLabel:'Cool (≥110)',          alertLow:'Too warm — hard to concentrate',                alertHigh:null },
+    sound: { min:null, max:18,   wantLabel:'Quiet (<18)',          alertLow:null,                                            alertHigh:'Too loud — distracting for study' }
+  },
+  hospital: {
+    label:'Hospital', icon:'🏥',
+    desc: 'Clinical lighting, normal temp & strict silence',
+    light: { min:null, max:380,  wantLabel:'Bright clinical (<380)', alertLow:null,                                          alertHigh:'Too dark — clinical environment needs light' },
+    temp:  { min:95,   max:110,  wantLabel:'Normal (95–110)',        alertLow:'Too hot for a clinical setting',               alertHigh:'Too cool for patient comfort' },
+    sound: { min:null, max:12,   wantLabel:'Strict silence (<12)',   alertLow:null,                                          alertHigh:'Too loud — hospital requires silence' }
+  },
+  gym: {
+    label:'Gym', icon:'💪',
+    desc: 'Bright, hot/warm & loud music is fine',
+    light: { min:null, max:470,  wantLabel:'Bright energy (<470)', alertLow:null,                                            alertHigh:'Too dark for a gym' },
+    temp:  { min:null, max:95,   wantLabel:'Hot/warm ok (<95)',    alertLow:null,                                            alertHigh:'Too cool — warm temps expected during workout' },
+    sound: { min:null, max:80,   wantLabel:'Loud ok (<80)',        alertLow:null,                                            alertHigh:'Sound level dangerously high' }
+  },
+  meditation: {
+    label:'Meditate', icon:'🧘',
+    desc: 'Dim, warm/hot & absolute silence',
+    light: { min:400,  max:null, wantLabel:'Dim/candle (≥400)',    alertLow:'Too bright — dim lights for meditation',        alertHigh:null },
+    temp:  { min:null, max:95,   wantLabel:'Warm/hot (<95)',       alertLow:null,                                            alertHigh:'Too cool — warmth aids meditation' },
+    sound: { min:null, max:8,    wantLabel:'Absolute silence (<8)',alertLow:null,                                            alertHigh:'Too loud — silence is essential' }
+  },
+  office: {
+    label:'Office', icon:'💼',
+    desc: 'Bright, cool & low background noise',
+    light: { min:null, max:440,  wantLabel:'Bright desk (<440)',   alertLow:null,                                            alertHigh:'Too dark — eye strain risk' },
+    temp:  { min:110,  max:null, wantLabel:'Cool AC (≥110)',       alertLow:'Too warm — AC may be off',                     alertHigh:null },
+    sound: { min:null, max:38,   wantLabel:'Low background (<38)', alertLow:null,                                            alertHigh:'Too loud — reducing productivity' }
+  },
+  cinema: {
+    label:'Cinema', icon:'🎬',
+    desc: 'Very dark, cool & loud audio expected',
+    light: { min:600,  max:null, wantLabel:'Very dark (≥600)',     alertLow:'Too bright — cinema must be dark',              alertHigh:null },
+    temp:  { min:110,  max:null, wantLabel:'Cool auditorium (≥110)',alertLow:'Too warm — auditorium needs AC',              alertHigh:null },
+    sound: { min:15,   max:null, wantLabel:'Audio present (≥15)',  alertLow:'Too quiet — check the audio system',           alertHigh:null }
+  },
+  dining: {
+    label:'Dining', icon:'🍽️',
+    desc: 'Ambient light, normal temp & lively atmosphere',
+    light: { min:null, max:520,  wantLabel:'Ambient warm (<520)',  alertLow:null,                                            alertHigh:'Too dark — dining needs ambient lighting' },
+    temp:  { min:95,   max:110,  wantLabel:'Normal (95–110)',      alertLow:'Too hot for comfortable dining',                alertHigh:'Too cool for comfortable dining' },
+    sound: { min:null, max:45,   wantLabel:'Lively ok (<45)',      alertLow:null,                                            alertHigh:'Too loud for the dining experience' }
+  },
+  concert: {
+    label:'Concert', icon:'🎸',
+    desc: 'Dim stage, warm/hot crowd & loud is the point',
+    light: { min:350,  max:null, wantLabel:'Stage dim (≥350)',     alertLow:'Too bright — dim for concert atmosphere',       alertHigh:null },
+    temp:  { min:null, max:110,  wantLabel:'Warm/hot ok (<110)',   alertLow:null,                                            alertHigh:'Too cool for a concert crowd' },
+    sound: { min:35,   max:null, wantLabel:'Loud (≥35 expected)',  alertLow:'Too quiet — where is the music?',              alertHigh:null }
+  },
+  lab: {
+    label:'Lab', icon:'🔬',
+    desc: 'Very bright, cool & quiet for precision work',
+    light: { min:null, max:320,  wantLabel:'Very bright (<320)',     alertLow:null,                                          alertHigh:'Too dark — safety risk for lab work' },
+    temp:  { min:110,  max:null, wantLabel:'Cool controlled (≥110)',  alertLow:'Too warm — may affect samples/equipment',   alertHigh:null },
+    sound: { min:null, max:18,   wantLabel:'Quiet (<18)',             alertLow:null,                                        alertHigh:'Too loud for precision work' }
+  }
+};
+
+let currentMode = 'sleep';
+let lastL = 0, lastT = 0, lastS = 0;
+
+/* Build buttons */
+const mGrid = document.getElementById('modeGrid');
+Object.entries(MODES).forEach(([key, m]) => {
+  const b = document.createElement('button');
+  b.className = 'mbtn' + (key==='sleep' ? ' active' : '');
+  b.innerHTML = `<span class="mi">${m.icon}</span>${m.label}`;
+  b.onclick = () => setMode(key);
+  b.id = 'mb-' + key;
+  mGrid.appendChild(b);
+});
+
+function setMode(k) {
+  currentMode = k;
+  document.querySelectorAll('.mbtn').forEach(b => b.classList.remove('active'));
+  document.getElementById('mb-'+k).classList.add('active');
+  document.getElementById('modeTag').textContent = 'MODE: ' + MODES[k].label.toUpperCase();
+  renderInfo(lastL, lastT, lastS);
+  doAlerts(lastL, lastT, lastS);
+  doBackground(lastL, lastT, lastS);
+}
+
+/* Check if a value is bad for a sensor config. Returns null or the alert message. */
+function sensorAlert(val, cfg) {
+  if (cfg.min !== null && val < cfg.min) return cfg.alertLow;
+  if (cfg.max !== null && val > cfg.max) return cfg.alertHigh;
+  return null;
+}
+
+function sensorOk(val, cfg) { return sensorAlert(val, cfg) === null; }
+
+function rangeStr(cfg) {
+  if (cfg.min !== null && cfg.max !== null) return `${cfg.min}–${cfg.max}`;
+  if (cfg.min !== null) return `≥${cfg.min}`;
+  if (cfg.max !== null) return `<${cfg.max}`;
+  return 'any';
+}
+
+function renderInfo(l, t, s) {
+  const m = MODES[currentMode];
+  const rows = [
+    { ok: sensorOk(l, m.light), label: m.light.wantLabel, range: rangeStr(m.light), cur: l ? Math.round(l) : '---' },
+    { ok: sensorOk(t, m.temp),  label: m.temp.wantLabel,  range: rangeStr(m.temp),  cur: t ? Math.round(t) : '---' },
+    { ok: sensorOk(s, m.sound), label: m.sound.wantLabel, range: rangeStr(m.sound), cur: s ? Math.round(s) : '---' },
+  ];
+  document.getElementById('modeInfo').innerHTML =
+    `<div style="font-size:9px;letter-spacing:2px;color:var(--c-dim);margin-bottom:7px;text-transform:uppercase">${m.desc}</div>` +
+    rows.map(r => `<div class="req ${r.ok?'ok':'bad'}"><div class="rdot"></div><span>${r.label} — now: ${r.cur}</span></div>`).join('');
+}
+
+/* Clock */
+function tick() {
+  const n = new Date();
+  document.getElementById('clock').textContent =
+    String(n.getHours()).padStart(2,'0')+':'+
+    String(n.getMinutes()).padStart(2,'0')+':'+
+    String(n.getSeconds()).padStart(2,'0');
+}
+setInterval(tick,1000); tick();
+
+/* Uptime */
+let t0 = null;
+setInterval(()=>{
+  if(!t0) return;
+  const s = Math.floor((Date.now()-t0)/1000);
+  document.getElementById('mu').textContent =
+    String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
+},1000);
+
+let mxL=0, mxT=0, mxS=0, alertCount=0;
+
+/* Human labels */
+function lbl_light(v) {
+  if(v<150) return 'VERY BRIGHT';
+  if(v<350) return 'BRIGHT';
+  if(v<500) return 'DIM';
+  if(v<700) return 'DARK';
+  return 'VERY DARK';
+}
+function lbl_temp(v) {
+  if(v<95)  return 'HOT';
+  if(v<110) return 'NORMAL';
+  return 'COOL';
+}
+function lbl_sound(v) {
+  if(v<5)  return 'SILENT';
+  if(v<12) return 'QUIET';
+  if(v<30) return 'MODERATE';
+  if(v<60) return 'LOUD';
+  return 'VERY LOUD';
+}
+
+/* Chart */
+const ctx = document.getElementById('chart').getContext('2d');
+const chart = new Chart(ctx, {
+  type:'line',
+  data:{
+    labels:[],
+    datasets:[
+      { borderColor:'#00ffc8', data:[], tension:0.5, pointRadius:0, borderWidth:2, fill:true,
+        backgroundColor:c=>{const g=c.chart.ctx.createLinearGradient(0,0,0,c.chart.height);g.addColorStop(0,'rgba(0,255,200,0.12)');g.addColorStop(1,'rgba(0,255,200,0)');return g;}},
+      { borderColor:'#ffc840', data:[], tension:0.5, pointRadius:0, borderWidth:2, fill:true,
+        backgroundColor:c=>{const g=c.chart.ctx.createLinearGradient(0,0,0,c.chart.height);g.addColorStop(0,'rgba(255,200,64,0.10)');g.addColorStop(1,'rgba(255,200,64,0)');return g;}},
+      { borderColor:'#ff6060', data:[], tension:0.5, pointRadius:0, borderWidth:2, fill:true,
+        backgroundColor:c=>{const g=c.chart.ctx.createLinearGradient(0,0,0,c.chart.height);g.addColorStop(0,'rgba(255,96,96,0.10)');g.addColorStop(1,'rgba(255,96,96,0)');return g;}},
+      { borderColor:'rgba(255,255,255,0.08)', borderDash:[5,5], data:[], pointRadius:0, borderWidth:1, fill:false }
+    ]
+  },
+  options:{
+    animation:false,
+    plugins:{legend:{display:false},tooltip:{enabled:false}},
+    scales:{
+      x:{display:false},
+      y:{display:true,min:0,max:100,
+        grid:{color:'rgba(0,255,200,0.04)'},
+        ticks:{color:'rgba(180,220,210,0.35)',font:{family:'Share Tech Mono',size:9},callback:v=>v+'%'}
+      }
+    }
+  }
+});
+function norm(v,mx){return Math.min((v/mx)*100,100);}
+
+/* Demo */
+let demoInt=null;
+function startDemo(){
+  t0=Date.now();
+  document.getElementById('connStatus').textContent='● DEMO';
+  document.getElementById('connStatus').className='pill lit';
+  document.getElementById('mst').textContent='DEMO';
+  let i=0;
+  demoInt=setInterval(()=>{
+    i++;
+    const l = 300+Math.sin(i*0.04)*280+(Math.random()-0.5)*50;
+    const t = 70+Math.sin(i*0.025)*45+(Math.random()-0.5)*8;
+    const s = 5+Math.abs(Math.sin(i*0.07))*60+(Math.random()-0.5)*4;
+    update(Math.max(0,l),Math.max(0,t),Math.max(0,s));
+  },600);
+}
+
+/* Serial */
+let port,reader,buf='';
+async function connect(){
+  try{
+    port=await navigator.serial.requestPort();
+    await port.open({baudRate:115200});
+    if(demoInt){clearInterval(demoInt);demoInt=null;}
+    t0=Date.now();
+    document.getElementById('connStatus').textContent='● LIVE';
+    document.getElementById('connStatus').className='pill lit';
+    document.getElementById('mst').textContent='LIVE';
+    const dec=new TextDecoderStream();
+    port.readable.pipeTo(dec.writable);
+    reader=dec.readable.getReader();
+    readLoop();
+  }catch(e){startDemo();}
+}
+async function readLoop(){
+  while(true){
+    const{value,done}=await reader.read();
+    if(done)break;
+    buf+=value;
+    const lines=buf.split('\n');buf=lines.pop();
+    for(let line of lines){
+      line=line.trim();if(!line)continue;
+      try{const d=JSON.parse(line);update(d.light,d.temp,d.sound);}catch(e){}
+    }
+  }
+}
+
+/* Main update */
+let smoothSev=0;
+function update(light,temp,sound){
+  lastL=light; lastT=temp; lastS=sound;
+
+  document.getElementById('v-light').textContent=Math.round(light);
+  document.getElementById('v-temp').textContent=Math.round(temp);
+  document.getElementById('v-sound').textContent=Math.round(sound);
+  document.getElementById('s-light').textContent=lbl_light(light);
+  document.getElementById('s-temp').textContent=lbl_temp(temp);
+  document.getElementById('s-sound').textContent=lbl_sound(sound);
+
+  document.getElementById('b-light').style.width=norm(light,1023)+'%';
+  document.getElementById('b-temp').style.width=norm(temp,150)+'%';
+  document.getElementById('b-sound').style.width=norm(sound,80)+'%';
+
+  if(light>mxL){mxL=light;document.getElementById('ml').textContent=Math.round(light);}
+  if(temp>mxT){mxT=temp;document.getElementById('mt').textContent=Math.round(temp);}
+  if(sound>mxS){mxS=sound;document.getElementById('ms').textContent=Math.round(sound);}
+
+  chart.data.labels.push('');
+  chart.data.datasets[0].data.push(norm(light,1023));
+  chart.data.datasets[1].data.push(norm(temp,150));
+  chart.data.datasets[2].data.push(norm(sound,80));
+  chart.data.datasets[3].data.push(50);
+  if(chart.data.labels.length>120){chart.data.labels.shift();chart.data.datasets.forEach(d=>d.data.shift());}
+  chart.update();
+
+  renderInfo(light,temp,sound);
+  doAlerts(light,temp,sound);
+  doBackground(light,temp,sound);
+}
+
+function doAlerts(l,t,s){
+  const m=MODES[currentMode];
+  const lMsg=sensorAlert(l,m.light);
+  const tMsg=sensorAlert(t,m.temp);
+  const sMsg=sensorAlert(s,m.sound);
+
+  setCard('c-light',!!lMsg);
+  setCard('c-temp',!!tMsg);
+  setCard('c-sound',!!sMsg);
+
+  const msgs=[lMsg,tMsg,sMsg].filter(Boolean).map(x=>'⚠ '+x);
+  const adv=document.getElementById('advice');
+  if(msgs.length===0){
+    adv.className='ok';
+    adv.innerHTML=`✓ All conditions nominal<br><span style="font-size:11px;opacity:0.55;letter-spacing:1px">Environment optimal for ${MODES[currentMode].label.toUpperCase()}</span>`;
+    document.getElementById('modeTag').className='pill lit';
+  }else{
+    alertCount+=msgs.length;
+    document.getElementById('ma').textContent=alertCount;
+    adv.className='bad';
+    adv.innerHTML=msgs.join('<br><br>');
+    document.getElementById('modeTag').className='pill warn';
+  }
+}
+
+function setCard(id,isAlert){
+  const el=document.getElementById(id);
+  el.classList.toggle('alert',isAlert);
+  el.classList.toggle('good',!isAlert);
+}
+
+function doBackground(l,t,s){
+  const m=MODES[currentMode];
+  let target=0;
+  if(sensorAlert(l,m.light)) target+=0.35;
+  if(sensorAlert(t,m.temp))  target+=0.35;
+  if(sensorAlert(s,m.sound)) target+=0.30;
+  smoothSev+=(Math.min(target,1)-smoothSev)*0.07;
+  document.getElementById('sevBg').style.opacity=smoothSev;
+}
+
+window.addEventListener('load',()=>{renderInfo(0,0,0);setTimeout(startDemo,600);});
+</script>
+</body>
+</html>
