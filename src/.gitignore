@@ -1,0 +1,20 @@
+# Arduino Build Artifacts & Temporary Files
+*.hex
+*.elf
+*.bin
+build/
+.arduinoIDE/
+
+# System & OS Caches
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Code Editor Caches
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+.idea/
+
+# Environment / Secret Keys
+*.env
