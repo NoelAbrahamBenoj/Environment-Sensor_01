@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ENV.SYS — Smart Environment Monitor</title>
+  
+  <!-- External Resources -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
+  
+  <!-- Custom Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="sevBg"></div>
+
+  <!-- TOPBAR -->
+  <div id="topbar" class="cell">
+    <div class="logo">ENV<span>.</span>SYS</div>
+    <div class="pill lit" id="modeTag">MODE: SLEEP</div>
+    <div class="pill" id="connStatus">● OFFLINE</div>
+    <div id="clock">--:--:--</div>
+    <button id="connectBtn" onclick="connect()"><span>⚡ CONNECT</span></button>
+  </div>
+
+  <!-- CHART -->
+  <div id="chartArea" class="cell">
+    <div class="chart-hdr">
+      <div class="chart-title"><span class="pulse"></span>REALTIME SENSOR FEED — 120s WINDOW</div>
+      <div class="legend">
+        <div class="leg"><div class="leg-dot" style="background:#00ffc8"></div>LIGHT</div>
+        <div class="leg"><div class="leg-dot" style="background:#ffc840"></div>TEMP</div>
+        <div class="leg"><div class="leg-dot" style="background:#ff6060"></div>SOUND</div>
+      </div>
+    </div>
+    <div id="chartWrap">
+      <div class="br tl"></div><div class="br tr"></div>
+      <div class="br bl"></div><div class="br br2"></div>
+      <canvas id="chart"></canvas>
+    </div>
+  </div>
+
+  <!-- SIDE PANEL -->
+  <div id="sidePanel" class="cell">
+    <div>
+      <div class="sec">Live Sensors</div>
+      <div class="sc" id="c-light">
+        <div class="sc-top">
+          <div class="sc-name">💡 Light</div>
+          <div><span class="sc-val" id="v-light">---</span><span class="sc-unit">/1023</span></div>
+        </div>
+        <div class="sc-status" id="s-light">AWAITING</div>
+        <div class="sc-bar"><div class="sc-fill" id="b-light" style="width:0%;background:#00ffc8"></div></div>
+      </div>
+      <div style="height:7px"></div>
+      <div class="sc" id="c-temp">
+        <div class="sc-top">
+          <div class="sc-name">🌡 Temp</div>
+          <div><span class="sc-val" id="v-temp">---</span><span class="sc-unit">raw</span></div>
+        </div>
+        <div class="sc-status" id="s-temp">AWAITING</div>
+        <div class="sc-bar"><div class="sc-fill" id="b-temp" style="width:0%;background:#ffc840"></div></div>
+      </div>
+      <div style="height:7px"></div>
+      <div class="sc" id="c-sound">
+        <div class="sc-top">
+          <div class="sc-name">🔊 Sound</div>
+          <div><span class="sc-val" id="v-sound">---</span><span class="sc-unit">raw</span></div>
+        </div>
+        <div class="sc-status" id="s-sound">AWAITING</div>
+        <div class="sc-bar"><div class="sc-fill" id="b-sound" style="width:0%;background:#ff6060"></div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="sec">Environment Mode</div>
+      <div class="mode-grid" id="modeGrid"></div>
+    </div>
+
+    <div>
+      <div class="sec">Mode Requirements</div>
+      <div id="modeInfo">—</div>
+    </div>
+
+    <div>
+      <div class="sec">System Advice</div>
+      <div id="advice" class="ok">Awaiting sensor input…</div>
+    </div>
+  </div>
+
+  <!-- BOTTOM -->
+  <div id="bot" class="cell">
+    <div class="sc2"><div class="s-lbl">Light Peak</div><div class="s-val" id="ml">---</div><div class="s-sub">SESSION HIGH</div></div>
+    <div class="sc2"><div class="s-lbl">Temp Peak</div><div class="s-val" id="mt">---</div><div class="s-sub">SESSION HIGH</div></div>
+    <div class="sc2"><div class="s-lbl">Sound Peak</div><div class="s-val" id="ms">---</div><div class="s-sub">SESSION HIGH</div></div>
+    <div class="sc2"><div class="s-lbl">Alerts</div><div class="s-val" id="ma">0</div><div class="s-sub">SESSION TOTAL</div></div>
+    <div class="sc2"><div class="s-lbl">Uptime</div><div class="s-val" id="mu">00:00</div><div class="s-sub">MM:SS</div></div>
+    <div class="sc2"><div class="s-lbl">Status</div><div class="s-val" id="mst" style="font-size:12px;letter-spacing:2px">STANDBY</div><div class="s-sub">SYSTEM</div></div>
+  </div>
+
+  <!-- Custom JavaScript -->
+  <script src="script.js"></script>
+</body>
+</html>
